@@ -1,0 +1,77 @@
+# Repo root - ignore common artifacts for frontend + backend projects
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+
+# Next.js / React
+.next/
+out/
+.build/
+dist/
+.vite/
+public/.cache
+
+# Backend build / artifacts
+build/
+lib/
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+debug.log*
+
+# Environment / secrets
+.env
+.env.* 
+.env.local
+.env.*.local
+secrets.yml
+credentials.json
+*.pem
+*.key
+
+# Uploads / temp
+uploads/
+upload/
+tmp/
+temp/
+.cache/
+*.tmp
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+/data/
+*.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+*.swp
+*~
+
+# Docker
+docker-compose.override.yml
+Dockerfile*
+
+# Misc
+*.local
+*.bak
+*.old
+*.log.*
