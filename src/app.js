@@ -9,6 +9,12 @@ const vendorRouter = require('./api/setup/vendor/vendor.route');
 const userRouter = require('./api/setup/user/user.route');
 const userGroupRouter = require('./api/setup/user_group/usergroup.route');
 
+// standards routers (main + lookups)
+const standardsRouter = require('./api/setup/standards/standards.route');
+const standardCategoriesRouter = require('./api/setup/standard_categories/standard_categories.route');
+const standardTitlesRouter = require('./api/setup/standard_titles/standard_titles.route');
+const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
+
 const uploadsDir = path.resolve(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -25,8 +31,14 @@ app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // mount API routers
 app.use('/api/setup/vendor', vendorRouter);
-app.use('/api/setup/user', userRouter); // ← Add this line
+app.use('/api/setup/user', userRouter);
 app.use('/api/setup/user-group', userGroupRouter);
+
+// standards endpoints
+app.use('/api/setup/standards', standardsRouter);                     // main standards CRUD
+app.use('/api/setup/standard-categories', standardCategoriesRouter);  // categories lookup
+app.use('/api/setup/standard-titles', standardTitlesRouter);          // titles lookup
+app.use('/api/setup/standards-citations', standardsCitationsRouter);  // citations lookup
 
 // health check
 app.get('/health', (req, res) => res.json({ ok: true }));
