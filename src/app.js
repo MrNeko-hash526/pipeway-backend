@@ -15,6 +15,9 @@ const standardCategoriesRouter = require('./api/setup/standard_categories/standa
 const standardTitlesRouter = require('./api/setup/standard_titles/standard_titles.route');
 const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
 
+// risk management routers (only main one exists)
+const riskManagementRouter = require('./api/setup/risk_management/risk_management.route');
+
 const uploadsDir = path.resolve(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -39,6 +42,11 @@ app.use('/api/setup/standards', standardsRouter);                     // main st
 app.use('/api/setup/standard-categories', standardCategoriesRouter);  // categories lookup
 app.use('/api/setup/standard-titles', standardTitlesRouter);          // titles lookup
 app.use('/api/setup/standards-citations', standardsCitationsRouter);  // citations lookup
+
+// risk management endpoints - all handled by main controller
+app.use('/api/setup/risk-management', riskManagementRouter);
+app.use('/api/setup/rrm-criteria', riskManagementRouter); // reuse same router
+app.use('/api/setup/rrm-levels', riskManagementRouter);   // reuse same router
 
 // health check
 app.get('/health', (req, res) => res.json({ ok: true }));

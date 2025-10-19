@@ -14,6 +14,8 @@ async function start() {
       console.log(`✅ User API: http://localhost:${PORT}/api/setup/user`);
       console.log(`✅ User-Group API: http://localhost:${PORT}/api/setup/user-group`);
       console.log(`✅ Standards Citations API: http://localhost:${PORT}/api/setup/standards-citations`);
+      console.log(`✅ Risk API: http://localhost:${PORT}/api/setup/risk`);
+
     });
   } catch (err) {
     console.error('❌ Failed to start:', err);
