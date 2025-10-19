@@ -5,6 +5,9 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const cors = require('cors');
 
+//set up dashboard router
+const setupDashboardRouter = require('./api/setup/setup_dashboard/setup_dashboard.route');
+
 const vendorRouter = require('./api/setup/vendor/vendor.route');
 const userRouter = require('./api/setup/user/user.route');
 const userGroupRouter = require('./api/setup/user_group/usergroup.route');
@@ -14,6 +17,7 @@ const standardsRouter = require('./api/setup/standards/standards.route');
 const standardCategoriesRouter = require('./api/setup/standard_categories/standard_categories.route');
 const standardTitlesRouter = require('./api/setup/standard_titles/standard_titles.route');
 const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
+
 
 // risk management routers (only main one exists)
 const riskManagementRouter = require('./api/setup/risk_management/risk_management.route');
@@ -31,6 +35,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // serve uploaded files if needed
 app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+
+//mount setup dashboard router
+app.use('/api/setup/dashboard', setupDashboardRouter);
 
 // mount API routers
 app.use('/api/setup/vendor', vendorRouter);
