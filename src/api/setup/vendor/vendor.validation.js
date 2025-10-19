@@ -1,3 +1,5 @@
+const { sequelize, Sequelize } = require('../../../../config/config');
+
 const FILE_MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -18,6 +20,46 @@ function isEmail(v) {
 
 function pushIf(cond, arr, msg) {
   if (cond) arr.push(msg);
+}
+
+// Check for duplicate email
+async function checkDuplicateEmail(email, excludeId = null) {
+  try {
+    const whereClause = excludeId ? 'WHERE email = ? AND id != ?' : 'WHERE email = ?';
+    const replacements = excludeId ? [email, excludeId] : [email];
+    
+    const result = await sequelize.query(
+      `SELECT COUNT(*) as count FROM vendor_setup ${whereClause}`,
+      { replacements, type: Sequelize.QueryTypes.SELECT }
+    );
+    
+    return result[0]?.count > 0;
+  } catch (error) {
+    console.error('Error checking duplicate email:', error);
+    return false;
+  }
+}
+
+// Check for duplicate phone number
+async function checkDuplicatePhone(phoneCountryCode, workPhone, excludeId = null) {
+  try {
+    const whereClause = excludeId ? 
+      'WHERE phone_country_code = ? AND work_phone = ? AND id != ?' : 
+      'WHERE phone_country_code = ? AND work_phone = ?';
+    const replacements = excludeId ? 
+      [phoneCountryCode, workPhone, excludeId] : 
+      [phoneCountryCode, workPhone];
+    
+    const result = await sequelize.query(
+      `SELECT COUNT(*) as count FROM vendor_setup ${whereClause}`,
+      { replacements, type: Sequelize.QueryTypes.SELECT }
+    );
+    
+    return result[0]?.count > 0;
+  } catch (error) {
+    console.error('Error checking duplicate phone:', error);
+    return false;
+  }
 }
 
 // Validate create — required fields enforced
@@ -51,9 +93,26 @@ async function validateCreateVendor(req, res, next) {
   }
 
   // email + confirmEmail check
-  if (!isEmail(body.email)) errors.push('email is invalid');
+  if (!isEmail(body.email)) {
+    errors.push('email is invalid');
+  } else {
+    // Check for duplicate email
+    const emailExists = await checkDuplicateEmail(body.email);
+    if (emailExists) {
+      errors.push('email already exists in the system');
+    }
+  }
+  
   if (body.confirmEmail && body.confirmEmail !== body.email) {
     errors.push('confirmEmail does not match email');
+  }
+
+  // Check for duplicate phone number
+  if (body.phoneCountryCode && body.workPhone) {
+    const phoneExists = await checkDuplicatePhone(body.phoneCountryCode, body.workPhone);
+    if (phoneExists) {
+      errors.push('phone number already exists in the system');
+    }
   }
 
   // attachments (from multer)
@@ -66,7 +125,7 @@ async function validateCreateVendor(req, res, next) {
     }
   }
 
-  if (errors.length) return res.status(400).json({ errors });
+  if (errors.length) return res.status(400).json({ success: false, errors });
   return next();
 }
 
@@ -75,8 +134,18 @@ async function validateUpdateVendor(req, res, next) {
   const body = req.body || {};
   const files = normalizeFiles(req.files);
   const errors = [];
+  const vendorId = req.params?.id;
 
-  if (body.email && !isEmail(body.email)) errors.push('email is invalid');
+  if (body.email && !isEmail(body.email)) {
+    errors.push('email is invalid');
+  } else if (body.email) {
+    // Check for duplicate email (excluding current vendor)
+    const emailExists = await checkDuplicateEmail(body.email, vendorId);
+    if (emailExists) {
+      errors.push('email already exists in the system');
+    }
+  }
+
   if (body.organizationCode && String(body.organizationCode).length > 20) {
     errors.push('organizationCode must be at most 20 characters');
   }
@@ -91,6 +160,14 @@ async function validateUpdateVendor(req, res, next) {
     if (!allowedRisk.includes(body.riskLevel)) errors.push(`riskLevel must be one of ${allowedRisk.join(', ')}`);
   }
 
+  // Check for duplicate phone number (excluding current vendor)
+  if (body.phoneCountryCode && body.workPhone) {
+    const phoneExists = await checkDuplicatePhone(body.phoneCountryCode, body.workPhone, vendorId);
+    if (phoneExists) {
+      errors.push('phone number already exists in the system');
+    }
+  }
+
   for (const f of files) {
     if (!ALLOWED_MIME_TYPES.includes(f.mimetype)) {
       errors.push(`file "${f.originalname || f.filename}" has unsupported type ${f.mimetype}`);
@@ -100,7 +177,7 @@ async function validateUpdateVendor(req, res, next) {
     }
   }
 
-  if (errors.length) return res.status(400).json({ errors });
+  if (errors.length) return res.status(400).json({ success: false, errors });
   return next();
 }
 
@@ -116,5 +193,7 @@ function validateIdParam(req, res, next) {
 module.exports = {
   validateCreateVendor,
   validateUpdateVendor,
-  validateIdParam
+  validateIdParam,
+  checkDuplicateEmail,
+  checkDuplicatePhone
 };

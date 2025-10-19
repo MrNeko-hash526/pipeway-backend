@@ -14,13 +14,30 @@ function mapFilesToAttachments(files) {
 
 async function createVendor(req, res) {
   try {
-    const data = req.body || {};
-    const attachments = mapFilesToAttachments(req.files);
-    const vendor = await vendorService.createVendor(data, attachments);
-    return res.status(201).json(vendor);
-  } catch (err) {
-    console.error(err);
-    return res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+    const vendor = await vendorService.createVendor(req.body, req.files);
+    res.status(201).json({
+      success: true,
+      data: vendor,
+      message: 'Vendor created successfully'
+    });
+  } catch (error) {
+    console.error('Create vendor error:', error);
+    
+    // Check if it's a validation error
+    if (error.message && (
+      error.message.includes('email already exists') || 
+      error.message.includes('phone number already exists')
+    )) {
+      return res.status(400).json({
+        success: false,
+        errors: [error.message]
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create vendor'
+    });
   }
 }
 
@@ -49,13 +66,37 @@ async function getVendor(req, res) {
 
 async function updateVendor(req, res) {
   try {
-    const attachments = mapFilesToAttachments(req.files);
-    const updated = await vendorService.updateVendor(req.params.id, req.body || {}, attachments);
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json(updated);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error' });
+    const vendor = await vendorService.updateVendor(req.params.id, req.body, req.files);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        error: 'Vendor not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: vendor,
+      message: 'Vendor updated successfully'
+    });
+  } catch (error) {
+    console.error('Update vendor error:', error);
+    
+    // Check if it's a validation error
+    if (error.message && (
+      error.message.includes('email already exists') || 
+      error.message.includes('phone number already exists')
+    )) {
+      return res.status(400).json({
+        success: false,
+        errors: [error.message]
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update vendor'
+    });
   }
 }
 

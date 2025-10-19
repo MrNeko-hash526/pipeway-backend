@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 const vendorService = require('./vendor.service');
+const validation = require('./vendor.validation'); // Add this import
 
 // Configure multer for file uploads
 const uploadsDir = path.resolve(__dirname, '../../../../uploads/vendor');
@@ -34,6 +35,59 @@ const upload = multer({
     } else {
       cb(new Error('Invalid file type: ' + file.mimetype));
     }
+  }
+});
+
+// Real-time validation endpoints - Add these BEFORE the existing routes
+router.post('/validate-email', async (req, res) => {
+  try {
+    const { email, excludeId } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email is required' 
+      });
+    }
+    
+    const exists = await validation.checkDuplicateEmail(email, excludeId);
+    res.json({
+      success: true,
+      exists,
+      message: exists ? 'Email already exists' : 'Email is available'
+    });
+  } catch (error) {
+    console.error('Email validation error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate email'
+    });
+  }
+});
+
+router.post('/validate-phone', async (req, res) => {
+  try {
+    const { phoneCountryCode, workPhone, excludeId } = req.body;
+    
+    if (!phoneCountryCode || !workPhone) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Phone country code and work phone are required' 
+      });
+    }
+    
+    const exists = await validation.checkDuplicatePhone(phoneCountryCode, workPhone, excludeId);
+    res.json({
+      success: true,
+      exists,
+      message: exists ? 'Phone number already exists' : 'Phone number is available'
+    });
+  } catch (error) {
+    console.error('Phone validation error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate phone number'
+    });
   }
 });
 
@@ -81,13 +135,35 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/setup/vendor - create new vendor with attachments
+// POST /api/setup/vendor - create new vendor with attachments (with validation)
 router.post('/', upload.array('attachments', 5), async (req, res) => {
   try {
     console.log('📝 POST /api/setup/vendor - Body:', req.body);
     console.log('📎 Files received:', req.files?.length || 0);
     
     const data = req.body;
+    
+    // Validate for duplicates before creating
+    if (data.email) {
+      const emailExists = await validation.checkDuplicateEmail(data.email);
+      if (emailExists) {
+        return res.status(400).json({ 
+          success: false,
+          errors: ['Email already exists in the system'] 
+        });
+      }
+    }
+    
+    if (data.phoneCountryCode && data.workPhone) {
+      const phoneExists = await validation.checkDuplicatePhone(data.phoneCountryCode, data.workPhone);
+      if (phoneExists) {
+        return res.status(400).json({ 
+          success: false,
+          errors: ['Phone number already exists in the system'] 
+        });
+      }
+    }
+    
     const attachments = (req.files || []).map(f => {
       console.log('📎 Processing file:', f.originalname, '->', f.filename);
       return {
@@ -103,15 +179,15 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 
     const vendor = await vendorService.createVendor(data, attachments);
     console.log('✅ Vendor created:', vendor.id);
-    res.status(201).json(vendor);
+    res.status(201).json({ success: true, data: vendor });
   } catch (err) {
     console.error('❌ POST /api/setup/vendor error:', err);
     console.error('Stack:', err.stack);
-    res.status(400).json({ error: err.message || 'create failed' });
+    res.status(400).json({ success: false, error: err.message || 'create failed' });
   }
 });
 
-// PUT /api/setup/vendor/:id - update vendor
+// PUT /api/setup/vendor/:id - update vendor (with validation)
 router.put('/:id', upload.array('attachments', 5), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -124,6 +200,28 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
     }
     
     const data = req.body;
+    
+    // Validate for duplicates before updating (excluding current vendor)
+    if (data.email) {
+      const emailExists = await validation.checkDuplicateEmail(data.email, id);
+      if (emailExists) {
+        return res.status(400).json({ 
+          success: false,
+          errors: ['Email already exists in the system'] 
+        });
+      }
+    }
+    
+    if (data.phoneCountryCode && data.workPhone) {
+      const phoneExists = await validation.checkDuplicatePhone(data.phoneCountryCode, data.workPhone, id);
+      if (phoneExists) {
+        return res.status(400).json({ 
+          success: false,
+          errors: ['Phone number already exists in the system'] 
+        });
+      }
+    }
+    
     const attachments = (req.files || []).map(f => ({
       filename: f.filename,
       original_name: f.originalname,
@@ -138,11 +236,11 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
     }
     
     console.log('✅ Vendor updated:', id);
-    res.json(vendor);
+    res.json({ success: true, data: vendor });
   } catch (err) {
     console.error('❌ PUT /api/setup/vendor/:id error:', err);
     console.error('Stack:', err.stack);
-    res.status(400).json({ error: err.message || 'update failed' });
+    res.status(400).json({ success: false, error: err.message || 'update failed' });
   }
 });
 
