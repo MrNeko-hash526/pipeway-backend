@@ -1,47 +1,41 @@
 const express = require('express');
 const router = express.Router();
+const { body, param } = require('express-validator');
 
 const controller = require('./risk_management.controller');
-const {
-  createRiskManagementValidation,
-  updateRiskManagementValidation,
-  getRiskManagementValidation,
-  getAllRiskManagementValidation,
-  createCriteriaValidation,
-  getAllCriteriaValidation,
-  createLevelValidation,
-  getAllLevelsValidation
-} = require('./risk_management.validation');
 
-// Main Risk Management Routes (for /api/setup/risk-management)
-router.get('/', getAllRiskManagementValidation, (req, res) => {
-  // Check if this is criteria or levels endpoint
-  if (req.baseUrl.includes('rrm-criteria')) {
-    return controller.getAllCriteria(req, res);
-  }
-  if (req.baseUrl.includes('rrm-levels')) {
-    return controller.getAllLevels(req, res);
-  }
-  // Default to risk management
-  return controller.getAllRiskManagement(req, res);
+// Validation middleware
+const validateId = [param('id').isInt().withMessage('Invalid ID')];
+const validateRiskManagement = [
+  body('criteria_id').isInt().withMessage('Criteria ID is required'),
+  body('rrm_option').notEmpty().withMessage('RRM Option is required'),
+  body('rrm_level').isInt().withMessage('RRM Level is required'),
+  body('rrm_exception').notEmpty().withMessage('Exception is required')
+];
+const validateRiskManagementUpdate = [
+  body('criteria_id').optional().isInt().withMessage('Criteria ID must be an integer'),
+  body('rrm_option').optional().notEmpty().withMessage('RRM Option is required when provided'),
+  body('rrm_level').optional().isInt().withMessage('RRM Level must be an integer when provided'),
+  body('rrm_exception').optional().notEmpty().withMessage('Exception is required when provided'),
+  body('status').optional().isIn(['Active','Inactive']).withMessage('Status must be Active or Inactive')
+];
+
+// Debug middleware
+router.use((req, res, next) => {
+  console.log('🔍 Risk Management Router:', {
+    method: req.method,
+    originalUrl: req.originalUrl,
+    path: req.path
+  });
+  next();
 });
 
-router.get('/:id', getRiskManagementValidation, controller.getRiskManagementById);
-
-router.post('/', (req, res) => {
-  // Check if this is criteria or levels endpoint
-  if (req.baseUrl.includes('rrm-criteria')) {
-    return controller.createCriteria(req, res);
-  }
-  if (req.baseUrl.includes('rrm-levels')) {
-    return controller.createLevel(req, res);
-  }
-  // Default to risk management with validation
-  const validation = createRiskManagementValidation;
-  return controller.createRiskManagement(req, res);
-});
-
-router.put('/:id', updateRiskManagementValidation, controller.updateRiskManagement);
-router.delete('/:id', getRiskManagementValidation, controller.deleteRiskManagement);
+// Risk Management routes only
+router.get('/', controller.getAllRiskManagement);
+router.get('/:id', validateId, controller.getRiskManagementById);
+router.post('/', validateRiskManagement, controller.createRiskManagement);
+router.put('/:id', validateId, validateRiskManagementUpdate, controller.updateRiskManagement);
+router.delete('/:id', validateId, controller.deleteRiskManagement);
+router.patch('/:id/restore', validateId, controller.restoreRiskManagement);
 
 module.exports = router;

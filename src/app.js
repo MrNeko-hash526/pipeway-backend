@@ -5,6 +5,12 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const cors = require('cors');
 
+// CREATE THE EXPRESS APP INSTANCE (this line was missing)
+const app = express();
+
+const uploadsDir = path.resolve(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
 //set up dashboard router
 const setupDashboardRouter = require('./api/setup/setup_dashboard/setup_dashboard.route');
 
@@ -18,14 +24,10 @@ const standardCategoriesRouter = require('./api/setup/standard_categories/standa
 const standardTitlesRouter = require('./api/setup/standard_titles/standard_titles.route');
 const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
 
-
-// risk management routers (only main one exists)
+// risk management routers
 const riskManagementRouter = require('./api/setup/risk_management/risk_management.route');
-
-const uploadsDir = path.resolve(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const app = express();
+const rrmCriteriaRouter = require('./api/setup/risk_management/rrm_criteria.route');
+const rrmLevelsRouter = require('./api/setup/risk_management/rrm_levels.route');
 
 app.use(helmet());
 app.use(cors());
@@ -45,15 +47,15 @@ app.use('/api/setup/user', userRouter);
 app.use('/api/setup/user-group', userGroupRouter);
 
 // standards endpoints
-app.use('/api/setup/standards', standardsRouter);                     // main standards CRUD
-app.use('/api/setup/standard-categories', standardCategoriesRouter);  // categories lookup
-app.use('/api/setup/standard-titles', standardTitlesRouter);          // titles lookup
-app.use('/api/setup/standards-citations', standardsCitationsRouter);  // citations lookup
+app.use('/api/setup/standards', standardsRouter);
+app.use('/api/setup/standard-categories', standardCategoriesRouter);
+app.use('/api/setup/standard-titles', standardTitlesRouter);
+app.use('/api/setup/standards-citations', standardsCitationsRouter);
 
-// risk management endpoints - all handled by main controller
+// risk management endpoints
 app.use('/api/setup/risk-management', riskManagementRouter);
-app.use('/api/setup/rrm-criteria', riskManagementRouter); // reuse same router
-app.use('/api/setup/rrm-levels', riskManagementRouter);   // reuse same router
+app.use('/api/setup/rrm-criteria', rrmCriteriaRouter);
+app.use('/api/setup/rrm-levels', rrmLevelsRouter);
 
 // health check
 app.get('/health', (req, res) => res.json({ ok: true }));
