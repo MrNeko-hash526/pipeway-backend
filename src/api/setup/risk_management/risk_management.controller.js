@@ -86,10 +86,28 @@ async function deleteRiskManagement(req, res) {
     if (!deleted) {
       return res.status(404).json({ error: 'Risk management entry not found' });
     }
-    res.json({ success: true, message: 'Risk management entry deleted' });
+    res.json({ success: true, message: 'Risk management entry deleted (soft delete)' });
   } catch (error) {
     console.error('Delete risk management error:', error);
     res.status(500).json({ error: 'Failed to delete risk management entry' });
+  }
+}
+
+async function restoreRiskManagement(req, res) {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const restored = await service.restoreRiskManagement(req.params.id);
+    if (!restored) {
+      return res.status(404).json({ error: 'Risk management entry not found or not deleted' });
+    }
+    res.json({ success: true, message: 'Risk management entry restored' });
+  } catch (error) {
+    console.error('Restore risk management error:', error);
+    res.status(500).json({ error: 'Failed to restore risk management entry' });
   }
 }
 
@@ -175,6 +193,7 @@ module.exports = {
   createRiskManagement,
   updateRiskManagement,
   deleteRiskManagement,
+  restoreRiskManagement,
   getAllCriteria,
   createCriteria,
   getAllLevels,

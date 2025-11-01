@@ -64,7 +64,7 @@ async function createVendor(data = {}, attachments = []) {
     const placeholders = fields.map(() => '?');
     const values = [...Object.values(mapped), JSON.stringify(attachmentsJson)];
 
-    const sql = `INSERT INTO vendor_setup (${fields.join(',')}, created_at, updated_at) VALUES (${placeholders.join(',')}, NOW(), NOW())`;
+    const sql = `INSERT INTO vendor_setup (${fields.join(',')}, deleted, created_at, updated_at) VALUES (${placeholders.join(',')}, 0, NOW(), NOW())`;
     console.log('🔍 SQL:', sql);
     console.log('🔍 Values:', values);
     console.log('📎 Attachments JSON:', JSON.stringify(attachmentsJson, null, 2));
@@ -92,12 +92,17 @@ async function createVendor(data = {}, attachments = []) {
   }
 }
 
-async function getAllVendors({ page = 1, limit = 50, search = '', status = '' }) {
-  console.log('📋 getAllVendors - page:', page, 'limit:', limit, 'search:', search, 'status:', status);
+async function getAllVendors({ page = 1, limit = 50, search = '', status = '', includeDeleted = false } = {}) {
+  console.log('📋 getAllVendors - page:', page, 'limit:', limit, 'search:', search, 'status:', status, 'includeDeleted:', includeDeleted);
   
   const offset = (page - 1) * limit;
   let where = [];
   const replacements = [];
+
+  // Always exclude deleted unless explicitly requested
+  if (!includeDeleted) {
+    where.push('deleted = 0');
+  }
 
   if (search) {
     where.push('organization_name LIKE ?');
@@ -142,11 +147,12 @@ async function getAllVendors({ page = 1, limit = 50, search = '', status = '' })
   }
 }
 
-async function getVendorById(id) {
-  console.log('🔍 getVendorById - ID:', id);
+async function getVendorById(id, includeDeleted = false) {
+  console.log('🔍 getVendorById - ID:', id, 'includeDeleted:', includeDeleted);
   
   try {
-    const vendorSql = 'SELECT * FROM vendor_setup WHERE id = ?';
+    const whereClause = includeDeleted ? 'WHERE id = ?' : 'WHERE id = ? AND deleted = 0';
+    const vendorSql = `SELECT * FROM vendor_setup ${whereClause}`;
     console.log('🔍 Vendor SQL:', vendorSql, 'ID:', id);
     
     const vendors = await sequelize.query(vendorSql, {
@@ -223,7 +229,7 @@ async function updateVendor(id, data = {}, newAttachments = []) {
 
     const updates = { ...mapped, attachments: JSON.stringify(allAttachments) };
     const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-    const sql = `UPDATE vendor_setup SET ${sets}, updated_at = NOW() WHERE id = ?`;
+    const sql = `UPDATE vendor_setup SET ${sets}, updated_at = NOW() WHERE id = ? AND deleted = 0`;
     
     console.log('🔍 Update SQL:', sql);
     console.log('🔍 Update values:', [...Object.values(updates), id]);
@@ -246,13 +252,70 @@ async function updateVendor(id, data = {}, newAttachments = []) {
   }
 }
 
+// Soft delete - mark as deleted instead of actual deletion
 async function deleteVendor(id) {
   console.log('🗑️ deleteVendor - ID:', id);
   
   const t = await sequelize.transaction();
   try {
-    // Get vendor to delete files
+    // Check if vendor exists and is not already deleted
     const vendor = await getVendorById(id);
+    if (!vendor) {
+      return false;
+    }
+
+    // Soft delete - just mark as deleted
+    await sequelize.query(
+      'UPDATE vendor_setup SET deleted = 1, updated_at = NOW() WHERE id = ?',
+      { replacements: [id], type: Sequelize.QueryTypes.UPDATE, transaction: t }
+    );
+
+    await t.commit();
+    console.log('✅ Vendor soft deleted:', id);
+    return true;
+  } catch (err) {
+    console.error('❌ Error in deleteVendor:', err);
+    await t.rollback();
+    throw err;
+  }
+}
+
+// Add restore function for soft deleted vendors
+async function restoreVendor(id) {
+  console.log('🔄 restoreVendor - ID:', id);
+  
+  const t = await sequelize.transaction();
+  try {
+    // Check if vendor exists and is deleted
+    const vendor = await getVendorById(id, true); // Include deleted
+    if (!vendor || vendor.deleted !== 1) {
+      return false;
+    }
+
+    // Restore - mark as not deleted
+    await sequelize.query(
+      'UPDATE vendor_setup SET deleted = 0, updated_at = NOW() WHERE id = ?',
+      { replacements: [id], type: Sequelize.QueryTypes.UPDATE, transaction: t }
+    );
+
+    await t.commit();
+    console.log('✅ Vendor restored:', id);
+    return true;
+  } catch (err) {
+    console.error('❌ Error in restoreVendor:', err);
+    await t.rollback();
+    throw err;
+  }
+}
+
+// Permanent delete function (if needed)
+async function permanentDeleteVendor(id) {
+  console.log('💀 permanentDeleteVendor - ID:', id);
+  
+  const t = await sequelize.transaction();
+  try {
+    // Get vendor to delete files (include deleted ones)
+    const vendor = await getVendorById(id, true);
     if (!vendor) {
       return false;
     }
@@ -273,17 +336,17 @@ async function deleteVendor(id) {
       }
     }
 
-    // Delete from database
+    // Permanent delete from database
     await sequelize.query(
       'DELETE FROM vendor_setup WHERE id = ?',
       { replacements: [id], type: Sequelize.QueryTypes.DELETE, transaction: t }
     );
 
     await t.commit();
-    console.log('✅ Vendor deleted:', id);
+    console.log('✅ Vendor permanently deleted:', id);
     return true;
   } catch (err) {
-    console.error('❌ Error in deleteVendor:', err);
+    console.error('❌ Error in permanentDeleteVendor:', err);
     await t.rollback();
     throw err;
   }
@@ -294,5 +357,7 @@ module.exports = {
   getAllVendors,
   getVendorById,
   updateVendor,
-  deleteVendor
+  deleteVendor,
+  restoreVendor,
+  permanentDeleteVendor
 };
