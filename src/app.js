@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const mime = require('mime-types');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -19,6 +20,7 @@ const standardTitlesRouter = require('./api/setup/standard_titles/standard_title
 const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
 
 // manage-policies router
+const attachmentsRouter = require('./api/manage-policies/attachment.route');
 const policyRouter = require('./api/manage-policies/policy.route');
 
 // risk management routers (only main one exists)
@@ -41,6 +43,23 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // serve uploaded files at /uploads/*
 app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
+// serve uploads folder at /uploads so URLs like /uploads/vendor/<file> work
+app.use('/uploads', express.static(path.resolve(__dirname, '../../uploads'), {
+  maxAge: '1h'
+}));
+
+// safe streaming endpoint for vendor files (inline for PDF, attachment otherwise)
+app.get('/files/vendor/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename || '')
+  const filePath = path.resolve(process.cwd(), 'uploads', 'vendor', filename)
+  if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, error: 'Not found' })
+  const mimeType = mime.lookup(filePath) || 'application/octet-stream'
+  const inline = mimeType === 'application/pdf'
+  res.setHeader('Content-Type', mimeType)
+  res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${path.basename(filePath)}"`)
+  fs.createReadStream(filePath).on('error', () => res.sendStatus(500)).pipe(res)
+});
+
 //mount setup dashboard router
 app.use('/api/setup/dashboard', setupDashboardRouter);
 
@@ -56,6 +75,7 @@ app.use('/api/setup/standard-titles', standardTitlesRouter);          // titles 
 app.use('/api/setup/standards-citations', standardsCitationsRouter);  // citations lookup
 
 // manage policies endpoints
+app.use('/api/manage-policies', attachmentsRouter);
 app.use('/api/manage-policies', policyRouter);
 
 // certificate file endpoints (upload/list/get/delete/restore)

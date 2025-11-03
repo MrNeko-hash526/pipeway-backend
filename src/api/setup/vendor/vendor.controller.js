@@ -1,16 +1,62 @@
 const vendorService = require('./vendor.service');
 const { validationResult } = require('express-validator');
+const path = require('path');
 
 /** helper to normalize multer files -> attachment objects */
 function mapFilesToAttachments(files) {
   if (!files) return [];
   const fileArray = Array.isArray(files) ? files : Object.values(files).flat();
-  return fileArray.map(f => ({
-    filename: f.originalname || f.filename,
-    url: f.path || f.location || null,
-    mime_type: f.mimetype,
-    size: f.size
-  }));
+  // log full multer info to debug where files were written
+  console.log('uploaded files (multer):', fileArray.map(f => ({ originalname: f.originalname, destination: f.destination, path: f.path, filename: f.filename })));
+ 
+  return fileArray.map(f => {
+    // multers saved filename is f.filename (the disk name); original file name is f.originalname
+    const savedName = f.filename || (f.path ? path.basename(f.path) : null)
+    // keep relative path matching how we serve /uploads -> uploads/<folder>/<file>
+    // assume multer destination is something like <project>/uploads/vendor
+    const relativePath = savedName ? `uploads/vendor/${savedName}` : (f.path ? path.relative(process.cwd(), f.path).replace(/\\/g,'/') : null)
+    return {
+      filename: savedName || f.originalname || null,
+      original_name: f.originalname || null,
+      file_path: relativePath,
+      file_size: f.size || 0,
+      mime_type: f.mimetype || null,
+      uploaded_at: new Date().toISOString(),
+      // frontend convenience URL (leading slash)
+      url: relativePath ? `/${relativePath.replace(/^\/+/, '')}` : null
+    }
+  })
+}
+
+// when creating/updating vendor, normalize attachments before storing
+// assume incoming attachments may be JSON string or array from frontend
+function normalizeAttachmentsInput(raw) {
+  let arr = []
+  try {
+    if (!raw) return []
+    if (typeof raw === 'string') {
+      arr = JSON.parse(raw)
+    } else if (Array.isArray(raw)) {
+      arr = raw
+    } else if (raw && typeof raw === 'object') {
+      arr = [raw]
+    }
+  } catch (e) {
+    arr = []
+  }
+  return arr.map((it) => {
+    const file_path = (it.file_path || it.path || it.filePath || '').replace(/^\/+/, '')
+    return {
+      filename: it.filename || it.file_name || it.name || path.basename(file_path),
+      original_name: it.original_name || it.originalname || it.name || null,
+      file_path: file_path ? `uploads/${file_path}`.replace(/\/+/g, '/') : file_path,
+      file_size: it.file_size || it.size || 0,
+      mime_type: it.mime_type || it.mimetype || null,
+      uploaded_at: it.uploaded_at || new Date().toISOString(),
+      // add url for frontend convenience (leading slash so '/uploads/...' resolves)
+      url: file_path ? `/${file_path}` : null
+    }
+  })
 }
 
 async function createVendor(req, res) {
@@ -117,6 +163,17 @@ async function getVendorById(req, res) {
         error: 'Vendor not found'
       });
     }
+
+    // Attachments normalization
+    let attachments = vendor.attachments || vendor.attachments_json || null
+    // normalize stored value (may already be JSON string or array)
+    attachments = normalizeAttachmentsInput(attachments)
+    // ensure url field present
+    attachments = attachments.map(a => ({
+      ...a,
+      url: a.url || (a.file_path ? `/${a.file_path.replace(/^\/+/, '')}` : null)
+    }))
+    vendor.attachments = attachments
 
     console.log('✅ Vendor found:', vendor.organization_name);
     res.json({
