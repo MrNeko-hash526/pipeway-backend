@@ -49,40 +49,115 @@ const createUserValidation = [
     .isEmail()
     .withMessage('Must be a valid email')
     .normalizeEmail(),
-    
+
   body('status')
     .optional()
     .isIn(['Active', 'Pending', 'Inactive'])
-    .withMessage('Status must be Active, Pending, or Inactive')
+    .withMessage('Status must be Active, Pending, or Inactive'),
+
+  // Custom validation to ensure proper field combinations and email uniqueness
+  body().custom(async (value, { req }) => {
+    const { userType, organizationId, companyName, email } = req.body;
+    
+    if (userType === 'Organization') {
+      if (!organizationId) {
+        throw new Error('Organization ID is required for Organization users');
+      }
+      // Ensure companyName is not provided for Organization users
+      if (companyName) {
+        throw new Error('Company name should not be provided for Organization users');
+      }
+    }
+    
+    if (userType === 'Company') {
+      if (!companyName) {
+        throw new Error('Company name is required for Company users');
+      }
+      // Ensure organizationId is not provided for Company users
+      if (organizationId) {
+        throw new Error('Organization ID should not be provided for Company users');
+      }
+    }
+    
+    return true;
+  })
 ];
 
 const updateUserValidation = [
   param('id').isInt({ min: 1 }).withMessage('Valid user ID is required'),
   
-  // Make all fields optional for updates (except what's being updated)
-  body('userType').optional().isIn(['Organization', 'Company']).withMessage('User type must be Organization or Company'),
-  body('organizationId').optional().isInt({ min: 1 }).withMessage('Organization ID must be a positive integer'),
-  body('companyName').optional().isLength({ min: 2 }).trim().withMessage('Company name must be at least 2 characters'),
-  body('userRole').optional().isIn(['Admin', 'Auditor', 'Manager', 'Viewer']).withMessage('Invalid user role'),
-  body('firstName').optional().isLength({ min: 2, max: 50 }).trim().withMessage('First name must be 2-50 characters'),
-  body('lastName').optional().isLength({ min: 2, max: 50 }).trim().withMessage('Last name must be 2-50 characters'),
-  body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('status').optional().isIn(['Active', 'Pending', 'Inactive']).withMessage('Status must be Active, Pending, or Inactive'),
+  // Make all fields optional for updates
+  body('userType')
+    .optional()
+    .isIn(['Organization', 'Company'])
+    .withMessage('User type must be Organization or Company'),
+    
+  body('organizationId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Organization ID must be a positive integer'),
+    
+  body('companyName')
+    .optional()
+    .isLength({ min: 2, max: 255 })
+    .trim()
+    .withMessage('Company name must be 2-255 characters'),
+    
+  body('userRole')
+    .optional()
+    .isIn(['Admin', 'Auditor', 'Manager', 'Viewer'])
+    .withMessage('Invalid user role'),
+    
+  body('firstName')
+    .optional()
+    .isLength({ min: 2, max: 100 })
+    .trim()
+    .matches(/^[a-zA-Z\s]+$/)
+    .withMessage('First name must be 2-100 characters and contain only letters and spaces'),
+    
+  body('lastName')
+    .optional()
+    .isLength({ min: 2, max: 100 })
+    .trim()
+    .matches(/^[a-zA-Z\s]+$/)
+    .withMessage('Last name must be 2-100 characters and contain only letters and spaces'),
+    
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Valid email is required'),
+    
+  body('status')
+    .optional()
+    .isIn(['Active', 'Pending', 'Inactive'])
+    .withMessage('Status must be Active, Pending, or Inactive'),
   
-  // Custom validation for partial updates
-  body().custom((value, { req }) => {
+  // Custom validation for updates
+  body().custom(async (value, { req }) => {
     // Allow status-only updates (for warn functionality)
     if (Object.keys(req.body).length === 1 && req.body.status) {
       return true;
     }
     
-    // For full updates, check user type dependencies
-    if (req.body.userType) {
-      if (req.body.userType === 'Organization' && !req.body.organizationId) {
-        throw new Error('Organization ID is required for Organization users');
+    // For updates involving userType, validate dependencies
+    const { userType, organizationId, companyName } = req.body;
+    
+    if (userType === 'Organization') {
+      if (!organizationId) {
+        throw new Error('Organization ID is required when changing to Organization user type');
       }
-      if (req.body.userType === 'Company' && !req.body.companyName) {
-        throw new Error('Company name is required for Company users');
+      if (companyName) {
+        throw new Error('Company name should not be provided for Organization users');
+      }
+    }
+    
+    if (userType === 'Company') {
+      if (!companyName) {
+        throw new Error('Company name is required when changing to Company user type');
+      }
+      if (organizationId) {
+        throw new Error('Organization ID should not be provided for Company users');
       }
     }
     
@@ -96,6 +171,12 @@ const getUserValidation = [
     .withMessage('User ID must be a positive integer')
 ];
 
+const deleteUserValidation = [
+  param('id')
+    .isInt({ min: 1 })
+    .withMessage('User ID must be a positive integer')
+];
+
 const getAllUsersValidation = [
   query('page')
     .optional()
@@ -104,8 +185,8 @@ const getAllUsersValidation = [
     
   query('limit')
     .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage('Limit must be between 1 and 100'),
+    .isInt({ min: 1, max: 1000 })
+    .withMessage('Limit must be between 1 and 1000'),
     
   query('search')
     .optional()
@@ -125,12 +206,18 @@ const getAllUsersValidation = [
   query('userRole')
     .optional()
     .isIn(['', 'All', 'Admin', 'Auditor', 'Manager', 'Viewer'])
-    .withMessage('User role must be Admin, Auditor, Manager, or Viewer')
+    .withMessage('User role must be Admin, Auditor, Manager, or Viewer'),
+
+  query('includeDeleted')
+    .optional()
+    .isBoolean()
+    .withMessage('includeDeleted must be a boolean')
 ];
 
 module.exports = {
   createUserValidation,
   updateUserValidation,
   getUserValidation,
+  deleteUserValidation,
   getAllUsersValidation
 };

@@ -36,13 +36,14 @@ const getAllUserGroups = async (req, res) => {
   console.log('📋 GET /api/setup/user-group - Get all user groups');
   
   try {
-    const { page = 1, limit = 100, search = '', status = 'Active' } = req.query;
+    const { page = 1, limit = 100, search = '', status = 'Active', includeDeleted = 'false' } = req.query;
     
     const params = {
       page: parseInt(page),
       limit: parseInt(limit),
       search: search.trim(),
-      status: status.trim()
+      status: status.trim(),
+      includeDeleted: includeDeleted === 'true'
     };
 
     console.log('📊 Query params:', params);
@@ -74,9 +75,10 @@ const getUserGroupById = async (req, res) => {
   
   try {
     const { id } = req.params;
-    console.log('📊 User group ID:', id);
+    const includeDeleted = req.query.includeDeleted === 'true';
+    console.log('📊 User group ID:', id, 'includeDeleted:', includeDeleted);
 
-    const userGroup = await userGroupService.getUserGroupById(id);
+    const userGroup = await userGroupService.getUserGroupById(id, includeDeleted);
     
     if (!userGroup) {
       console.log('⚠️ User group not found');
@@ -159,7 +161,7 @@ const deleteUserGroup = async (req, res) => {
     console.log('✅ User group deleted successfully');
     res.json({
       success: true,
-      message: 'User group deleted successfully'
+      message: 'User group deleted successfully (soft delete)'
     });
   } catch (err) {
     console.error('❌ Error deleting user group:', err);
@@ -170,10 +172,72 @@ const deleteUserGroup = async (req, res) => {
   }
 };
 
+const restoreUserGroup = async (req, res) => {
+  console.log('🔄 PUT /api/setup/user-group/:id/restore - Restore user group');
+  
+  try {
+    const { id } = req.params;
+    console.log('📊 User group ID:', id);
+
+    const success = await userGroupService.restoreUserGroup(id);
+    
+    if (!success) {
+      console.log('⚠️ User group not found or not deleted');
+      return res.status(404).json({
+        error: 'User group not found or not deleted'
+      });
+    }
+
+    console.log('✅ User group restored successfully');
+    res.json({
+      success: true,
+      message: 'User group restored successfully'
+    });
+  } catch (err) {
+    console.error('❌ Error restoring user group:', err);
+    res.status(500).json({
+      error: 'Failed to restore user group',
+      message: err.message
+    });
+  }
+};
+
+const permanentDeleteUserGroup = async (req, res) => {
+  console.log('💀 DELETE /api/setup/user-group/:id/permanent - Permanent delete user group');
+  
+  try {
+    const { id } = req.params;
+    console.log('📊 User group ID:', id);
+
+    const success = await userGroupService.permanentDeleteUserGroup(id);
+    
+    if (!success) {
+      console.log('⚠️ User group not found');
+      return res.status(404).json({
+        error: 'User group not found'
+      });
+    }
+
+    console.log('✅ User group permanently deleted');
+    res.json({
+      success: true,
+      message: 'User group permanently deleted'
+    });
+  } catch (err) {
+    console.error('❌ Error permanently deleting user group:', err);
+    res.status(500).json({
+      error: 'Failed to permanently delete user group',
+      message: err.message
+    });
+  }
+};
+
 module.exports = {
   createUserGroup,
   getAllUserGroups,
   getUserGroupById,
   updateUserGroup,
-  deleteUserGroup
+  deleteUserGroup,
+  restoreUserGroup,
+  permanentDeleteUserGroup
 };

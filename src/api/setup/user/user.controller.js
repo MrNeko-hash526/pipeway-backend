@@ -1,180 +1,223 @@
-const UserService = require('./user.service');
+const { UserService } = require('./user.service');
 const { validationResult } = require('express-validator');
 
-class UserController {
-  constructor() {
-    this.userService = new UserService();
+const userService = new UserService();
+
+// Get all users with pagination and filters
+const getAllUsers = async (req, res) => {
+  console.log('📋 GET /api/setup/user - Get all users');
+  console.log('📊 Query params:', req.query);
+  
+  try {
+    const { 
+      page = 1, 
+      limit = 50, 
+      search = '', 
+      status = '', 
+      userType = '', 
+      userRole = '', 
+      includeDeleted = false 
+    } = req.query;
+    
+    const result = await userService.getAllUsers({
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      search: search.toString(),
+      status: status.toString(),
+      userType: userType.toString(),
+      userRole: userRole.toString(),
+      includeDeleted: includeDeleted === 'true'
+    });
+    
+    console.log('✅ Users retrieved successfully');
+    res.json(result);
+  } catch (err) {
+    console.error('❌ Error getting users:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get users', 
+      message: err.message 
+    });
   }
+};
 
-  createUser = async (req, res) => {
-    console.log('📝 POST /api/setup/user - Create user');
-    console.log('📊 Request body:', req.body);
-
-    try {
-      // Check validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ Validation errors:', errors.array());
-        return res.status(400).json({
-          error: 'Validation failed',
-          errors: errors.array()
-        });
-      }
-
-      const user = await this.userService.createUser(req.body);
-      console.log('✅ User created successfully:', user.id);
-      
-      res.status(201).json({
-        success: true,
-        message: 'User created successfully',
-        data: user
-      });
-    } catch (err) {
-      console.error('❌ Error creating user:', err);
-      res.status(500).json({
-        error: 'Failed to create user',
-        message: err.message
-      });
-    }
-  };
-
-  getAllUsers = async (req, res) => {
-    console.log('📋 GET /api/setup/user - Get all users');
+// Get user by ID
+const getUserById = async (req, res) => {
+  console.log('🔍 GET /api/setup/user/:id - Get user by ID');
+  console.log('📊 User ID:', req.params.id);
+  
+  try {
+    const { id } = req.params;
+    const { includeDeleted = false } = req.query;
     
-    try {
-      const filters = {
-        page: parseInt(req.query.page) || 1,
-        limit: parseInt(req.query.limit) || 50,
-        search: req.query.search || '',
-        status: req.query.status || '',
-        userType: req.query.userType || '',
-        userRole: req.query.userRole || ''
-      };
-
-      console.log('📊 Query filters:', filters);
-
-      const result = await this.userService.getAllUsers(filters);
-      console.log(`✅ Found ${result.rows.length} users (total: ${result.total})`);
-      
-      res.json({
-        success: true,
-        data: result.rows,
-        pagination: {
-          page: result.page,
-          limit: result.limit,
-          total: result.total,
-          totalPages: Math.ceil(result.total / result.limit)
-        }
-      });
-    } catch (err) {
-      console.error('❌ Error fetching users:', err);
-      res.status(500).json({
-        error: 'Failed to fetch users',
-        message: err.message
-      });
-    }
-  };
-
-  getUserById = async (req, res) => {
-    console.log('🔍 GET /api/setup/user/:id - Get user by ID');
+    const user = await userService.getUserById(
+      parseInt(id, 10), 
+      includeDeleted === 'true'
+    );
     
-    try {
-      const { id } = req.params;
-      console.log('📊 User ID:', id);
-
-      const user = await this.userService.getUserById(id);
-      
-      if (!user) {
-        console.log('⚠️ User not found');
-        return res.status(404).json({
-          error: 'User not found'
-        });
-      }
-
-      console.log('✅ User found:', user.email);
-      res.json({
-        success: true,
-        data: user
-      });
-    } catch (err) {
-      console.error('❌ Error fetching user:', err);
-      res.status(500).json({
-        error: 'Failed to fetch user',
-        message: err.message
+    if (!user) {
+      console.log('⚠️ User not found');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
       });
     }
-  };
-
-  updateUser = async (req, res) => {
-    console.log('📝 PUT /api/setup/user/:id - Update user');
     
-    try {
-      const { id } = req.params;
-      console.log('📊 User ID:', id);
-      console.log('📊 Update data:', req.body);
+    console.log('✅ User retrieved successfully');
+    res.json({ 
+      success: true, 
+      data: user 
+    });
+  } catch (err) {
+    console.error('❌ Error getting user:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get user', 
+      message: err.message 
+    });
+  }
+};
 
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        console.log('❌ Validation errors:', errors.array());
-        return res.status(400).json({
-          error: 'Validation failed',
-          errors: errors.array()
-        });
-      }
-
-      const user = await this.userService.updateUser(id, req.body);
-      
-      console.log('✅ User updated successfully:', user.email);
-      res.json({
-        success: true,
-        message: 'User updated successfully',
-        data: user
-      });
-    } catch (err) {
-      console.error('❌ Error updating user:', err);
-      
-      if (err.message === 'User not found') {
-        return res.status(404).json({
-          error: 'User not found'
-        });
-      }
-      
-      res.status(500).json({
-        error: 'Failed to update user',
-        message: err.message
+// Create new user
+const createUser = async (req, res) => {
+  console.log('📝 POST /api/setup/user - Create user');
+  console.log('📊 Request body:', req.body);
+  
+  try {
+    // Check for validation errors from express-validator
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        errors: errors.array()
       });
     }
-  };
-
-  deleteUser = async (req, res) => {
-    console.log('🗑️ DELETE /api/setup/user/:id - Delete user');
     
-    try {
-      const { id } = req.params;
-      console.log('📊 User ID:', id);
-
-      const success = await this.userService.deleteUser(id);
-      
-      if (!success) {
-        console.log('⚠️ User not found');
-        return res.status(404).json({
-          error: 'User not found'
-        });
-      }
-
-      console.log('✅ User deleted successfully');
-      res.json({
-        success: true,
-        message: 'User deleted successfully'
-      });
-    } catch (err) {
-      console.error('❌ Error deleting user:', err);
-      res.status(500).json({
-        error: 'Failed to delete user',
-        message: err.message
+    const user = await userService.createUser(req.body);
+    
+    console.log('✅ User created successfully');
+    res.status(201).json({ 
+      success: true, 
+      data: user,
+      message: 'User created successfully'
+    });
+  } catch (err) {
+    console.error('❌ Error creating user:', err);
+    
+    // Handle specific error types
+    if (err.message.includes('already registered') || 
+        err.message.includes('already exists') ||
+        err.message.includes('must be unique')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Failed to create user', 
+        message: err.message 
       });
     }
-  };
-}
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create user', 
+      message: err.message 
+    });
+  }
+};
 
-module.exports = new UserController();
+// Update user
+const updateUser = async (req, res) => {
+  console.log('📝 PUT /api/setup/user/:id - Update user');
+  console.log('📊 User ID:', req.params.id);
+  console.log('📊 Request body:', req.body);
+  
+  try {
+    // Check for validation errors from express-validator
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+    
+    const { id } = req.params;
+    const user = await userService.updateUser(parseInt(id, 10), req.body);
+    
+    if (!user) {
+      console.log('⚠️ User not found for update');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+    
+    console.log('✅ User updated successfully');
+    res.json({ 
+      success: true, 
+      data: user,
+      message: 'User updated successfully'
+    });
+  } catch (err) {
+    console.error('❌ Error updating user:', err);
+    
+    // Handle specific error types
+    if (err.message.includes('already registered') || 
+        err.message.includes('already exists') ||
+        err.message.includes('must be unique')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Failed to update user', 
+        message: err.message 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update user', 
+      message: err.message 
+    });
+  }
+};
+
+// Delete user (soft delete)
+const deleteUser = async (req, res) => {
+  console.log('🗑️ DELETE /api/setup/user/:id - Delete user');
+  console.log('📊 User ID:', req.params.id);
+  
+  try {
+    const { id } = req.params;
+    const success = await userService.deleteUser(parseInt(id, 10));
+    
+    if (!success) {
+      console.log('⚠️ User not found for deletion');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+    
+    console.log('✅ User deleted successfully');
+    res.json({ 
+      success: true, 
+      message: 'User deleted successfully' 
+    });
+  } catch (err) {
+    console.error('❌ Error deleting user:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to delete user', 
+      message: err.message 
+    });
+  }
+};
+
+module.exports = {
+  getAllUsers,
+  getUserById,
+  createUser,
+  updateUser,
+  deleteUser
+};

@@ -14,8 +14,8 @@ async function createUserGroup(data) {
     console.log('📊 Mapped data:', mappedData);
 
     const sql = `
-      INSERT INTO user_groups_setup (group_name, group_values, status, created_at, updated_at)
-      VALUES (?, ?, ?, NOW(), NOW())
+      INSERT INTO user_groups_setup (group_name, group_values, status, deleted, created_at, updated_at)
+      VALUES (?, ?, ?, 0, NOW(), NOW())
     `;
 
     const result = await sequelize.query(sql, {
@@ -43,12 +43,17 @@ async function createUserGroup(data) {
   }
 }
 
-async function getAllUserGroups({ page = 1, limit = 100, search = '', status = 'Active' }) {
-  console.log('📋 getAllUserGroups - page:', page, 'limit:', limit, 'search:', search, 'status:', status);
+async function getAllUserGroups({ page = 1, limit = 100, search = '', status = 'Active', includeDeleted = false } = {}) {
+  console.log('📋 getAllUserGroups - page:', page, 'limit:', limit, 'search:', search, 'status:', status, 'includeDeleted:', includeDeleted);
   
   const offset = (page - 1) * limit;
   let where = [];
   const replacements = [];
+
+  // Always exclude deleted unless explicitly requested
+  if (!includeDeleted) {
+    where.push('deleted = 0');
+  }
 
   if (search) {
     where.push('group_name LIKE ?');
@@ -68,6 +73,7 @@ async function getAllUserGroups({ page = 1, limit = 100, search = '', status = '
         group_name,
         group_values,
         status,
+        deleted,
         created_at,
         updated_at
       FROM user_groups_setup
@@ -108,20 +114,22 @@ async function getAllUserGroups({ page = 1, limit = 100, search = '', status = '
   }
 }
 
-async function getUserGroupById(id) {
-  console.log('🔍 getUserGroupById - ID:', id);
+async function getUserGroupById(id, includeDeleted = false) {
+  console.log('🔍 getUserGroupById - ID:', id, 'includeDeleted:', includeDeleted);
   
   try {
+    const whereClause = includeDeleted ? 'WHERE id = ?' : 'WHERE id = ? AND deleted = 0';
     const sql = `
       SELECT 
         id,
         group_name,
         group_values,
         status,
+        deleted,
         created_at,
         updated_at
       FROM user_groups_setup
-      WHERE id = ?
+      ${whereClause}
     `;
     
     console.log('🔍 SQL:', sql, 'ID:', id);
@@ -178,7 +186,7 @@ async function updateUserGroup(id, data) {
     const sql = `
       UPDATE user_groups_setup 
       SET group_name = ?, group_values = ?, status = ?, updated_at = NOW()
-      WHERE id = ?
+      WHERE id = ? AND deleted = 0
     `;
 
     await sequelize.query(sql, {
@@ -199,28 +207,77 @@ async function updateUserGroup(id, data) {
   }
 }
 
+// Soft delete - mark as deleted instead of actual deletion
 async function deleteUserGroup(id) {
   console.log('🗑️ deleteUserGroup - ID:', id);
   
   try {
-    // Check if user group exists
-    const existing = await getUserGroupById(id);
-    if (!existing) {
-      console.log('⚠️ User group not found for deletion:', id);
+    // Check if user group exists and is not already deleted
+    const userGroup = await getUserGroupById(id);
+    if (!userGroup) {
       return false;
     }
 
-    const sql = `DELETE FROM user_groups_setup WHERE id = ?`;
-    
-    const result = await sequelize.query(sql, {
-      replacements: [id],
-      type: Sequelize.QueryTypes.DELETE
-    });
+    // Soft delete - just mark as deleted
+    await sequelize.query(
+      'UPDATE user_groups_setup SET deleted = 1, updated_at = NOW() WHERE id = ?',
+      { replacements: [id], type: Sequelize.QueryTypes.UPDATE }
+    );
 
-    console.log('✅ User group deleted successfully');
+    console.log('✅ User group soft deleted:', id);
     return true;
   } catch (err) {
     console.error('❌ Error in deleteUserGroup:', err);
+    throw err;
+  }
+}
+
+// Add restore function for soft deleted user groups
+async function restoreUserGroup(id) {
+  console.log('🔄 restoreUserGroup - ID:', id);
+  
+  try {
+    // Check if user group exists and is deleted
+    const userGroup = await getUserGroupById(id, true); // Include deleted
+    if (!userGroup || userGroup.deleted !== 1) {
+      return false;
+    }
+
+    // Restore - mark as not deleted
+    await sequelize.query(
+      'UPDATE user_groups_setup SET deleted = 0, updated_at = NOW() WHERE id = ?',
+      { replacements: [id], type: Sequelize.QueryTypes.UPDATE }
+    );
+
+    console.log('✅ User group restored:', id);
+    return true;
+  } catch (err) {
+    console.error('❌ Error in restoreUserGroup:', err);
+    throw err;
+  }
+}
+
+// Permanent delete function (if needed)
+async function permanentDeleteUserGroup(id) {
+  console.log('💀 permanentDeleteUserGroup - ID:', id);
+  
+  try {
+    // Get user group to check existence (include deleted ones)
+    const userGroup = await getUserGroupById(id, true);
+    if (!userGroup) {
+      return false;
+    }
+
+    // Permanent delete from database
+    await sequelize.query(
+      'DELETE FROM user_groups_setup WHERE id = ?',
+      { replacements: [id], type: Sequelize.QueryTypes.DELETE }
+    );
+
+    console.log('✅ User group permanently deleted:', id);
+    return true;
+  } catch (err) {
+    console.error('❌ Error in permanentDeleteUserGroup:', err);
     throw err;
   }
 }
@@ -230,5 +287,7 @@ module.exports = {
   getAllUserGroups,
   getUserGroupById,
   updateUserGroup,
-  deleteUserGroup
+  deleteUserGroup,
+  restoreUserGroup,
+  permanentDeleteUserGroup
 };

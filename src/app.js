@@ -18,9 +18,14 @@ const standardCategoriesRouter = require('./api/setup/standard_categories/standa
 const standardTitlesRouter = require('./api/setup/standard_titles/standard_titles.route');
 const standardsCitationsRouter = require('./api/setup/standards_citations/standards_citations.route');
 
+// manage-policies router
+const policyRouter = require('./api/manage-policies/policy.route');
 
 // risk management routers (only main one exists)
 const riskManagementRouter = require('./api/setup/risk_management/risk_management.route');
+
+// certificate files router
+const certificatesRouter = require('./api/certificates/certificate.route');
 
 const uploadsDir = path.resolve(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -33,8 +38,8 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// serve uploaded files if needed
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+// serve uploaded files at /uploads/*
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
 //mount setup dashboard router
 app.use('/api/setup/dashboard', setupDashboardRouter);
@@ -49,6 +54,12 @@ app.use('/api/setup/standards', standardsRouter);                     // main st
 app.use('/api/setup/standard-categories', standardCategoriesRouter);  // categories lookup
 app.use('/api/setup/standard-titles', standardTitlesRouter);          // titles lookup
 app.use('/api/setup/standards-citations', standardsCitationsRouter);  // citations lookup
+
+// manage policies endpoints
+app.use('/api/manage-policies', policyRouter);
+
+// certificate file endpoints (upload/list/get/delete/restore)
+app.use('/api/certificates', certificatesRouter);
 
 // risk management endpoints - all handled by main controller
 app.use('/api/setup/risk-management', riskManagementRouter);

@@ -136,7 +136,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/setup/vendor - create new vendor with attachments (with validation)
-router.post('/', upload.array('attachments', 5), async (req, res) => {
+router.post('/', upload.array('attachments', 5), validation.validateCreateVendor, async (req, res) => {
   try {
     console.log('📝 POST /api/setup/vendor - Body:', req.body);
     console.log('📎 Files received:', req.files?.length || 0);
@@ -188,7 +188,7 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 });
 
 // PUT /api/setup/vendor/:id - update vendor (with validation)
-router.put('/:id', upload.array('attachments', 5), async (req, res) => {
+router.put('/:id', upload.array('attachments', 5), validation.validateUpdateVendor, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     console.log('📝 PUT /api/setup/vendor/:id - ID:', id);
@@ -267,5 +267,13 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message || 'delete failed' });
   }
 });
+
+// Add multer-specific error handler (place after routes)
+router.use((err, req, res, next) => {
+  if (err && (err instanceof multer.MulterError || err.message && err.message.startsWith('Invalid file type'))) {
+    return res.status(400).json({ success: false, errors: [err.message] })
+  }
+  next(err)
+})
 
 module.exports = router;
